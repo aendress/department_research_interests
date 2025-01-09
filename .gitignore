@@ -2,6 +2,7 @@
 2024/
 old/
 output/
+output.old/
 
 # Ignore various Rmd compilation outputs
 *.log

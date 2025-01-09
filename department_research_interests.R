@@ -1,7 +1,7 @@
 ## ----extract-code, eval = FALSE----------------------------------------------------------------------------
 # # Extract code to run on the command line, which is much faster than in the GUI
 # 
-# knitr::purl("interests.Rmd", output = "interests.R")
+# knitr::purl("department_research_interests.Rmd", output = "department_research_interests.R")
 # 
 
 
@@ -13,15 +13,33 @@ library(httr)
 library(tidyverse)
 library(xlsx)
 
+
+## ----set-parameters----------------------------------------------------------------------------------------
 DEBUG_FLAG <- FALSE
 RECALCULATE_EVERYTHING <- TRUE
-#MODEL <- "mistral"
-MODEL <- "llama3.2"
+
+if(Sys.getenv("RSTUDIO") == "1"){
+    
+    # We are running in RStudio
+    MODEL <- "mistral"
+    #MODEL <- "llama3.2"
+    TOP_P = .7
+    #TOP_P = .35
+    
+} else {
+    
+    # We are running on the command line
+    args <- commandArgs(trailingOnly = TRUE) 
+    MODEL <- args[1]
+    TOP_P <- as.numeric(args[2])
+    
+    message("We are using model ", MODEL, " and top_p = ", TOP_P)
+}
 
 
 ## ----define-ollama-request-function------------------------------------------------------------------------
 
-query_ollama <- function(prompt, system_prompt = NULL, model = "llama3.2", temperature = .6, top_k = 15, top_p = .35, num_ctx = 8192, verbose = FALSE){
+query_ollama <- function(prompt, system_prompt = NULL, model = "llama3.2", temperature = .6, top_k = 15, top_p = .7, num_ctx = 8192, verbose = FALSE){
     
     # Initialize the payload with model and options
     payload <- list(
@@ -93,15 +111,15 @@ query_ollama <- function(prompt, system_prompt = NULL, model = "llama3.2", tempe
 l.system.prompts <- list(
     
     funders = str_c(
-        "Please suggest 5 possible funding sources for the research of a UK-based academic described below, based on their research topics and research questions.",
+        "Please suggest 5 possible funding sources for the research of a UK-based academic described below, based on their research topics and research questions. The funder does not need to be based in the UK, but UK-based academics need to be eligible",
         "For each funding source, briefly describe the kind for research that is relevant for the funder in less than 20 words, and rate the likelihood that it is relevant to the academic’s research on a scale from 1 (possibly relevant) to 5 (definitely relevant). ",
-        "Strictly adhere to the following output format so it can be processed automatically:",
+        "Strictly adhere to the following output format. Any deviation from the format makes the response unusable.",
         "[funding source name and type of research that this source might fund]::[relevance rating]",
-        "Example:",
-        "National Institute for Health Research, for xamining the impact of social media use on hiring fairness and inclusivity::2",                       
+        "Example response:",
+        "National Institute for Health Research, for examining the impact of social media use on hiring fairness and inclusivity::2",                       
         "",
         "Further intructions",
-        "- The response must be in the exact format provided, no additions, deviations or any other text are allowed. Any changes to the format make the reply unusable",
+        "- The response must be in the exact format provided, no additions, deviations or any other text are allowed. Any changes to the format make the response unusable",
         "- Use '::' as the separator (not ':'). ",
         "- Do not number the funding sources. Simply provide 5 distinct funding sources.",
         sep = "\n"),
@@ -125,22 +143,22 @@ l.system.prompts <- list(
         sep = "\n"),
     
     skills = str_c(
-        "Consider the following pair of academics in a UK psychology department. Academic 1 desires certain skills in a collaborator. Please assess the likelihood that Academic 2 possesses each of the desired skills, based on either their shareable skills. Consider that Academic 2 does not have any relevant skills unless the skills desired by Academic 1 are explicitly mentioned either as Academic 2's shareable skills or as their research topics. Skills that not explicitly desired by Academic 1 are irrelevant; skills that are not explicitly offered by Academic 2 are not available. ",
+        "Consider the following pair of academics in a UK psychology department. Academic 1 requires certain skills from a collaborator. Please assess the likelihood that Academic 2 possesses each of the required skills, based on the skills they offer to share. Consider that Academic 2 does not have any relevant skills unless the skills required by Academic 1 are explicitly mentioned either as the skills Academic 2's offers to share or as Academic 2's research topics. Skills that not explicitly required by Academic 1 are irrelevant; skills that are not explicitly offered by Academic 2 are not available.",
         "",
         "Your response must strictly adhere to the following format (no exceptions allowed):",
-        "[Skill requested by Academic 1]::[Numeric likelihood rating that Academic 2 has it on a scale from 1 (very unlikely) to 5 (very likely)]",
+        "[Skill required by Academic 1]::[Numeric likelihood rating that Academic 2 has it on a scale from 1 (very unlikely) to 5 (very likely)]",
         "",
         "Example output:",
         "NLP::4",
         "",
         "Further instructions:",
         "- Do not include any additional text, commentary, or justification. Any deviation from this format will render the response unusable.",
-        "- Provide a separate line for each skill listed under 'Desired Skills'.",
+        "- Provide a separate line for each skill listed under 'Required Skills'.",
         "- If a skill cannot be assessed, write NA instead of a numeric rating, e.g., 'Machine learning::NA'.",
         sep = "\n"),
     
     collaborations = str_c(
-        "Consider the following pair of academics in a UK psychology department. Based on their research topics, questions, and both the shareable and desired skills of each academic, please suggest up to three potential collaboration topics. For each topic, also suggest a relevant funder for the research. For each topic, assess the likelihood that both academics will be excited about the collaboration on a scale from 1 (very unlikely) to 5 (very likely). Ensure that each topic includes a clear rationale explaining its scientific importance and alignment with both academics' expertise and skills. The rationale should be integrated within the topic description and should not exceed 250 words.",
+        "Consider the following pair of academics in a UK psychology department. Based on their research topics, research questions, and the skills each academic offers to share, please suggest up to three potential collaboration topics. For each topic, also suggest a relevant funder for the research. For each topic, assess the likelihood that both academics will be excited about the collaboration on a scale from 1 (very unlikely) to 5 (very likely). Ensure that each topic includes a clear rationale explaining its scientific importance and alignment with both academics' expertise and skills. The rationale should be integrated within the topic description and should not exceed 250 words.",
         "",
         "Your response must strictly adhere to the following format (no exceptions allowed):",
         "[Topic and rationale as specified above]::[Potential funder]::[Numeric likelihood rating that both academics will be excited about the collaboration on a scale from 1 (very unlikely) to 5 (very likely)]",
@@ -262,8 +280,8 @@ if(RECALCULATE_EVERYTHING){
                     Research.Questions,
                     sep = "\n"
                 ), 
-                funding_sources = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$funders, model = MODEL)),
-                .before =1 ) %>% 
+                funding_sources = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$funders, model = MODEL, top_p = TOP_P)),
+                .before = 1) %>% 
             tidyr::separate_rows(funding_sources, sep="\n") %>% 
             tidyr::separate_wider_delim(funding_sources, 
                                         delim =  stringr::regex("\\s*\\:\\:\\s*"),
@@ -295,7 +313,7 @@ if(RECALCULATE_EVERYTHING){
                     "The academic's research questions are:",
                     Research.Questions,
                     sep = "\n"), 
-                impact = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$impact, model = MODEL)),
+                impact = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$impact, model = MODEL, top_p = TOP_P)),
                 .before =1 ) %>% 
             dplyr::select(Name, impact) %>% 
             tidyr::unnest(impact),
@@ -317,16 +335,16 @@ if(RECALCULATE_EVERYTHING){
                 Research.Keywords_1,
                 "The research questions of Academic 1 are:",
                 Research.Questions_1,
-                "The desired skills by Academic 1 are:",
+                "The skills Academic 1 requires from a collaborator are:",
                 Desired.Skills_1,
                 "The research topics of Academic 2 are:",
                 Research.Keywords_2,
                 "The research questions of Academic 2 are:",
                 Research.Questions_2,
-                "The shareable skills by Academic 2 are:",
+                "The skills Academic 2 offers to share are:",
                 Shareable.Skills_2,
                 sep = "\n"), 
-                skill_sources = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$skills, model = MODEL)),
+                skill_sources = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$skills, model = MODEL, top_p = TOP_P)),
                 .before =1 ) %>% 
             dplyr::select(Name_1, Name_2, skill_sources) %>% 
             tidyr::separate_rows(skill_sources, sep = "\n") %>% 
@@ -356,20 +374,16 @@ if(RECALCULATE_EVERYTHING){
                                           Research.Keywords_1,
                                           "The research questions of Academic 1 are:",
                                           Research.Questions_1,
-                                          "The desired skills by Academic 1 are:",
-                                          Desired.Skills_1,
-                                          "The shareable skills by Academic 1 are:",
+                                          "The skills Academic 1 offers to share are:",
                                           Shareable.Skills_1,
                                           "The research topics of Academic 2 are:",
                                           Research.Keywords_2,
                                           "The research questions of Academic 2 are:",
                                           Research.Questions_2,
-                                          "The desired skills by Academic 2 are:",
-                                          Desired.Skills_2,
-                                          "The shareable skills by Academic 2 are:",
+                                          "The skills Academic 2 offers to share are:",
                                           Shareable.Skills_2,
                                           sep = "\n"),
-                      collaborations = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$collaborations, model = MODEL)),
+                      collaborations = purrr::map(user_prompt, ~ query_ollama(prompt = .x, system_prompt = l.system.prompts$collaborations, model = MODEL, top_p = TOP_P)),
                       .before = 1) %>% 
         dplyr::select(Name_1, Name_2, collaborations) %>% 
         tidyr::separate_rows(collaborations, sep = "\n") %>% 
@@ -391,7 +405,7 @@ if(RECALCULATE_EVERYTHING){
 ## ----save-results------------------------------------------------------------------------------------------
 
 if(RECALCULATE_EVERYTHING){
-    save(dat.interests, dat.collaborations, file = paste0("output/research_interests_2024.", MODEL, ".RData"))
+    save(dat.interests, dat.collaborations, file = paste0("output/research_interests_2024.", MODEL, ".", TOP_P, ".RData"))
     #load("output/research_interests_2024.RData")
     
     dat.interests %>%
@@ -403,7 +417,7 @@ if(RECALCULATE_EVERYTHING){
         dplyr::rename_with(~ str_replace_all(.x, "\\.", " ")) %>% 
         as.data.frame() %>% 
         xlsx::write.xlsx(.,
-                         file = paste0("output/research_interests_2024.", MODEL, ".xlsx"),
+                         file = paste0("output/research_interests_2024.", MODEL, ".", TOP_P, ".xlsx"),
                          row.names = FALSE,
                          sheetName = "Research interests",
                          showNA = FALSE,
@@ -418,7 +432,7 @@ if(RECALCULATE_EVERYTHING){
                       "Rating of interest of collaboration (1-5)" = rating) %>% 
         as.data.frame() %>%
         xlsx::write.xlsx(.,
-                         file = paste0("output/research_interests_2024.", MODEL, ".xlsx"),
+                         file = paste0("output/research_interests_2024.", MODEL, ".", TOP_P, ".xlsx"),
                          row.names = FALSE,
                          sheetName = "Potential collaborations",
                          showNA = FALSE,
