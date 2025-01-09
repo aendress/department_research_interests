@@ -1,0 +1,16 @@
+# Select directories
+2024/
+old/
+output/
+
+# Ignore various Rmd compilation outputs
+*.log
+*.aux
+*.toc
+*.out
+*.html
+*.Rhistory
+*.RData
+*.Rhistory
+
+.Rproj.user
