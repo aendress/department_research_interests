@@ -8,7 +8,7 @@ output: pdf_document
 ```{r extract-code, eval = FALSE}
 # Extract code to run on the command line, which is much faster than in the GUI
 
-knitr::purl("interests.Rmd", output = "interests.R")
+knitr::purl("department_research_interests.Rmd", output = "department_research_interests.R")
 
 ```
 
