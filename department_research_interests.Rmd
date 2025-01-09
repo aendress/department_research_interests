@@ -37,9 +37,13 @@ if(Sys.getenv("RSTUDIO") == "1"){
 } else {
     
     # We are running on the command line
-    args <- commandArgs(trailingOnly = TRUE) 
-    MODEL <- args[1]
-    TOP_P <- as.numeric(args[2])
+    argv <- commandArgs(trailingOnly = TRUE) 
+    
+    if(length(argv) != 2)
+        stop("Usage: Rscript department_research_interests.R model top_p")
+    
+    MODEL <- argv[1]
+    TOP_P <- as.numeric(argv[2])
     
     message("We are using model ", MODEL, " and top_p = ", TOP_P)
 }
